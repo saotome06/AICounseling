@@ -24,8 +24,8 @@ struct AICounselingApp: App {
             }
             .onAppear {
 //                UserDefaultsを削除してデバッグしたいときは以下コメントを外す
-                let appDomain = Bundle.main.bundleIdentifier
-                UserDefaults.standard.removePersistentDomain(forName: appDomain!)
+//                let appDomain = Bundle.main.bundleIdentifier
+//                UserDefaults.standard.removePersistentDomain(forName: appDomain!)
                 sessionManager.checkSession()
                 
                 // FCMにデバイストークンを登録

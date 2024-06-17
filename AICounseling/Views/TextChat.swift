@@ -1,8 +1,26 @@
 import SwiftUI
-
+import Supabase
 struct TextChat: View {
     @State private var messages: [Message] = []
     @State private var inputText: String = ""
+    
+    private var supabaseURL: URL {
+        guard let urlString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+              let url = URL(string: urlString) else {
+            fatalError("SUPABASE_URL not found in Info.plist or is not a valid URL")
+        }
+        return url
+    }
+    private var supabaseKey: String {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_KEY") as? String else {
+            fatalError("SUPABASE_KEY not found in Info.plist")
+        }
+        return key
+    }
+
+    private var client: SupabaseClient {
+        return SupabaseClient(supabaseURL: supabaseURL, supabaseKey: supabaseKey)
+    }
     
     var body: some View {
         NavigationView {
@@ -57,22 +75,67 @@ struct TextChat: View {
         }
         .navigationBarBackButtonHidden(true) // Backボタンを隠す
         .navigationBarItems(leading: EmptyView())
+        .onAppear {
+            fetchLogData()
+        }
+    }
+    func fetchLogData() {
+        guard let email = UserDefaults.standard.string(forKey: "user_email") else { return }
+        
+        Task {
+            do {
+                let response = try await client.from("users")
+                    .select("log_data")
+                    .eq("user_email", value: email)
+                    .execute()
+                
+                let data = response.data
+                let logData = String(decoding: data, as: UTF8.self)
+                parseLogData(logData)
+            } catch {
+                print("Error fetching log data: \(error)")
+            }
+        }
+    }
+    
+    func parseLogData(_ logData: String) {
+        do {
+            let jsonData = try JSONSerialization.jsonObject(with: Data(logData.utf8), options: []) as? [[String: String]]
+            guard let log = jsonData?.first?["log_data"],
+                  let logJSONData = log.data(using: .utf8),
+                  let logDict = try JSONSerialization.jsonObject(with: logJSONData, options: []) as? [String: Any],
+                  let logArray = logDict["log"] as? [[String: String]] else {
+                print("Log data not found")
+                return
+            }
+            
+            for entry in logArray {
+                if let content = entry["content"], let role = entry["role"] {
+                    let message = Message(text: content, isReceived: role == "assistant", role: role)
+                    messages.append(message)
+                }
+            }
+        } catch {
+            print("Error decoding log data: \(error)")
+        }
     }
     
     private func sendMessage() {
         if !inputText.isEmpty {
-            messages.append(Message(text: inputText, isReceived: false))
+            print("sendmessage: ", messages)
+            messages.append(Message(text: inputText, isReceived: false, role: "user"))
             
-            ChatGPTService.shared.fetchResponse(inputText) { result in
+            ChatGPTService.shared.fetchResponse(inputText,messages: messages) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success(let response):
-                        messages.append(Message(text: response, isReceived: true))
+                        messages.append(Message(text: response, isReceived: true, role: "assistant"))
                     case .failure(let error):
                         print("Error: \(error.localizedDescription)")
-                        messages.append(Message(text: "エラーが発生しました。", isReceived: true))
+                        messages.append(Message(text: "エラーが発生しました。", isReceived: true, role: "assistant"))
                     }
                     inputText = ""
+
                 }
             }
         }

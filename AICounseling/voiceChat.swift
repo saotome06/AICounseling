@@ -204,13 +204,13 @@ struct VoiceChat: View {
     
     private func sendMessage() {
         if !voiceText.isEmpty {
-            messages.append(Message(text: voiceText, isReceived: false))
+            messages.append(Message(text: voiceText, isReceived: false, role:"assistant"))
             
-            ChatGPTService.shared.fetchResponse(voiceText) { result in
+            ChatGPTService.shared.fetchResponse(voiceText,messages:messages) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success(let response):
-                        messages.append(Message(text: response, isReceived: true))
+                        messages.append(Message(text: response, isReceived: true, role:"assistant"))
                         Task {
                             do {
                                 try await viewModel.createSpeech(input: response)
@@ -220,7 +220,7 @@ struct VoiceChat: View {
                         }
                     case .failure(let error):
                         print("Error: \(error.localizedDescription)")
-                        messages.append(Message(text: "エラーが発生しました。", isReceived: true))
+                        messages.append(Message(text: "エラーが発生しました。", isReceived: true, role:"assistant"))
                     }
                     voiceText = ""
                 }
